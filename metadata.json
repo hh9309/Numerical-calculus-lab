@@ -1,0 +1,6 @@
+{
+  "name": "数据微积分实验室",
+  "description": "离散求导、数值积分、信号平滑与AI诊断交互式沙盒",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
