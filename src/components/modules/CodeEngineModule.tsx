@@ -67,7 +67,7 @@ export const CodeEngineModule: React.FC<CodeEngineModuleProps> = ({
   const [executionTimeMs, setExecutionTimeMs] = useState(0);
 
   // Filter sliced data for display
-  const slicedData = dataPoints.filter(
+  const slicedData = (dataPoints || []).filter(
     (p) => p.index >= sliceBounds.startIdx && p.index <= sliceBounds.endIdx
   );
 

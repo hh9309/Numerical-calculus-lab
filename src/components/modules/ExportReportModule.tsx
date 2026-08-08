@@ -51,7 +51,7 @@ export const ExportReportModule: React.FC<ExportReportModuleProps> = ({
   const [previewRows, setPreviewRows] = useState<number>(10);
 
   // Filter sliced data for display & export
-  const slicedData = dataPoints.filter(
+  const slicedData = (dataPoints || []).filter(
     (p) => p.index >= sliceBounds.startIdx && p.index <= sliceBounds.endIdx
   );
 

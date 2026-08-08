@@ -172,6 +172,7 @@ export default function App() {
 
           {activeTab === "code_engine" && (
             <CodeEngineModule
+              dataPoints={dataPoints}
               signalPreset={signalPreset}
               sampleCount={sampleCount}
               dx={dx}

@@ -57,7 +57,7 @@ export const DifferenceSandboxModule: React.FC<DifferenceSandboxModuleProps> = (
   }, [isPlaying, sliceBounds.startIdx, sliceBounds.endIdx, playbackSpeed]);
 
   // Filter sliced data
-  const slicedData = dataPoints.filter(
+  const slicedData = (dataPoints || []).filter(
     (p) => p.index >= sliceBounds.startIdx && p.index <= sliceBounds.endIdx
   );
 

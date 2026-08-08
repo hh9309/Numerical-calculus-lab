@@ -79,7 +79,7 @@ export const DiscreteEssenceModule: React.FC<DiscreteEssenceModuleProps> = ({
   }, [isDeltaXAnimating]);
 
   // Filter sliced data points
-  const slicedData = dataPoints.filter(
+  const slicedData = (dataPoints || []).filter(
     (p) => p.index >= sliceBounds.startIdx && p.index <= sliceBounds.endIdx
   );
 
