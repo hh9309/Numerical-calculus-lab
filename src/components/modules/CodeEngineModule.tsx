@@ -82,38 +82,74 @@ export const CodeEngineModule: React.FC<CodeEngineModuleProps> = ({
 
   // Generate python code per slice
   const getSlicePythonCode = (slice: SliceType): string => {
+    const totalN = slicedData.length > 0 ? slicedData.length : 100;
+    const startXVal = Number(sliceBounds.startX.toFixed(2));
+    const endXVal = Number(sliceBounds.endX.toFixed(2));
+    const calculatedDx = slicedData.length > 1 && sliceBounds.endX > sliceBounds.startX
+      ? Number(((sliceBounds.endX - sliceBounds.startX) / (slicedData.length - 1)).toFixed(4))
+      : Number(dx.toFixed(4));
+
     switch (slice) {
       case "filter":
         return `# [代码引擎切片 1] 信号平滑与滤波降噪 (Signal Filtering Slicer)
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
 from scipy.signal import savgol_filter
 
-# 1. 产生含噪数据 (${signalPreset})
-N = ${slicedData.length}
-x = np.linspace(${sliceBounds.startX.toFixed(2)}, ${sliceBounds.endX.toFixed(2)}, N)
-y_noisy = np.sin(x) + np.random.normal(0, ${noiseLevel}, N)
+# 1. 算法与数据参数配置
+filter_method = "${filterMethod}"
+signal_preset = "${signalPreset}"
+N = ${totalN}
+x = np.linspace(${startXVal}, ${endXVal}, N)
 
-# 2. 滤波算法切片 (${filterMethod})
+# 产生含噪模拟信号
+np.random.seed(42)
+y_clean = np.sin(x) + 0.5 * np.sin(3 * x)
+y_noisy = y_clean + np.random.normal(0, ${noiseLevel}, N)
+
+# 2. 滤波算法切片
 ${
   filterMethod === "savitzky_golay"
     ? "y_filtered = savgol_filter(y_noisy, window_length=5, polyorder=2)"
     : filterMethod === "moving_average"
     ? "y_filtered = pd.Series(y_noisy).rolling(window=5, min_periods=1).mean().to_numpy()"
-    : "y_filtered = y_noisy.copy() # 无滤波"
+    : "y_filtered = y_noisy.copy()  # 无滤波"
 }
 
-print(f"[滤波切片] 原始噪点方差: {np.var(y_noisy):.5f} -> 平滑后方差: {np.var(y_filtered):.5f}")
+# 3. 输出平滑分析指标
+print("=== 1. 信号滤波降噪分析报告 ===")
+print(f"信号预设: {signal_preset}, 滤波算法: {filter_method}, 样本点数: {N}")
+print(f"原始含噪方差 Var(y_noisy):    {np.var(y_noisy):.6f}")
+print(f"平滑后信号方差 Var(y_filtered): {np.var(y_filtered):.6f}")
+
+# 4. Matplotlib 绘图输出
+plt.figure(figsize=(9, 4.5))
+plt.plot(x, y_noisy, 'r.', alpha=0.4, label='Noisy Input')
+plt.plot(x, y_filtered, 'b-', linewidth=2, label=f'Filtered ({filter_method})')
+plt.plot(x, y_clean, 'k--', alpha=0.7, label='Ground Truth')
+plt.title(f"1. Signal Smoothing & Denoising ({filter_method})")
+plt.xlabel("x")
+plt.ylabel("Signal Value")
+plt.legend()
+plt.grid(True, linestyle='--', alpha=0.5)
+plt.tight_layout()
+plt.show()
 `;
 
       case "difference":
         return `# [代码引擎切片 2] 离散数值求导 (Numerical Differentiation Slicer)
 import numpy as np
+import matplotlib.pyplot as plt
 
-dx = ${(sliceBounds.endX > sliceBounds.startX ? (sliceBounds.endX - sliceBounds.startX) / (slicedData.length - 1) : dx).toFixed(4)}
-y = np.sin(np.linspace(${sliceBounds.startX.toFixed(2)}, ${sliceBounds.endX.toFixed(2)}, ${slicedData.length}))
+# 1. 算法与步长参数配置
+diff_method = "${diffMethod}"
+N = ${totalN}
+x = np.linspace(${startXVal}, ${endXVal}, N)
+dx = ${calculatedDx}
+y = np.sin(x)
 
-# 求导算法切片 (${diffMethod})
+# 2. 离散数值求导算法
 ${
   diffMethod === "central"
     ? "# 中心差分法 O(dx^2)\ndy_dx = np.zeros_like(y)\ndy_dx[1:-1] = (y[2:] - y[:-2]) / (2 * dx)\ndy_dx[0] = (y[1] - y[0]) / dx\ndy_dx[-1] = (y[-1] - y[-2]) / dx"
@@ -122,82 +158,183 @@ ${
     : "# 后向差分法 O(dx)\ndy_dx = np.zeros_like(y)\ndy_dx[1:] = np.diff(y) / dx\ndy_dx[0] = dy_dx[1]"
 }
 
-print(f"[求导切片] 最大割线斜率 dy/dx max: {np.max(dy_dx):.4f}")
+# 3. 理论精确导数与误差对比
+dy_exact = np.cos(x)
+rmse = np.sqrt(np.mean((dy_dx - dy_exact)**2))
+
+print("=== 2. 离散数值求导分析报告 ===")
+print(f"求导算法: {diff_method}, 离散步长 dx: {dx:.4f}, 采样点数: {N}")
+print(f"均方根误差 RMSE: {rmse:.6e}")
+print(f"导数均值: {np.mean(dy_dx):.4f}, 最大割线斜率: {np.max(dy_dx):.4f}")
+
+# 4. Matplotlib 绘图输出
+plt.figure(figsize=(9, 4.5))
+plt.plot(x, dy_exact, 'k--', label="Exact Analytical dy/dx (cos(x))")
+plt.plot(x, dy_dx, 'g.-', label=f"Numerical dy/dx ({diff_method})")
+plt.title(f"2. Numerical Differentiation ({diff_method})")
+plt.xlabel("x")
+plt.ylabel("dy/dx")
+plt.legend()
+plt.grid(True, linestyle='--', alpha=0.5)
+plt.tight_layout()
+plt.show()
 `;
 
       case "integration":
         return `# [代码引擎切片 3] 复合数值积分 (Numerical Integration Slicer)
 import numpy as np
+import matplotlib.pyplot as plt
 from scipy.integrate import simpson, trapezoid
 
-x = np.linspace(${sliceBounds.startX.toFixed(2)}, ${sliceBounds.endX.toFixed(2)}, ${slicedData.length})
-dx = x[1] - x[0]
+# 1. 算法与几何参数配置
+int_method = "${intMethod}"
+N = ${totalN}
+x = np.linspace(${startXVal}, ${endXVal}, N)
+dx = ${calculatedDx}
 y = np.sin(x) + 1.0
 
-# 积分算法切片 (${intMethod})
+# 2. 复合数值积分算法
 ${
   intMethod === "trapezoidal"
-    ? "cum_integral = np.zeros_like(y)\nfor i in range(1, len(x)):\n    cum_integral[i] = trapezoid(y[:i+1], x[:i+1])"
+    ? "# 复合梯形法则积分\ncum_integral = np.zeros_like(y)\nfor i in range(1, N):\n    cum_integral[i] = trapezoid(y[:i+1], x[:i+1])"
     : intMethod === "simpson"
-    ? "total_area = simpson(y, x=x)\ncum_integral = np.cumsum(y) * dx"
-    : "cum_integral = np.cumsum(y) * dx"
+    ? "# 复合辛普森法则积分\ncum_integral = np.zeros_like(y)\nfor i in range(1, N):\n    if i % 2 == 0:\n        cum_integral[i] = simpson(y[:i+1], x=x[:i+1])\n    else:\n        cum_integral[i] = trapezoid(y[:i+1], x[:i+1])"
+    : "# 矩形积分 (左端点累加)\ncum_integral = np.cumsum(y) * dx"
 }
 
-print(f"[积分切片] 定积分曲边梯形总面积 ∫f(x)dx = {slicedData[slicedData.length - 1]?.intExact?.toFixed(6) || "0.00"}")
+total_area = cum_integral[-1]
+
+# 3. 输出定积分结果
+print("=== 3. 复合数值积分分析报告 ===")
+print(f"数值积分算法: {int_method}, 积分区间: [{x[0]:.2f}, {x[-1]:.2f}]")
+print(f"定积分曲边梯形总面积 ∫f(x)dx = {total_area:.6f}")
+
+# 4. Matplotlib 绘图输出
+plt.figure(figsize=(9, 4.5))
+plt.plot(x, y, 'b-', label='f(x) = sin(x) + 1')
+plt.fill_between(x, y, color='indigo', alpha=0.25, label=f'Area = {total_area:.4f}')
+plt.plot(x, cum_integral, 'm--', label=f'Cumulative Integral ({int_method})')
+plt.title(f"3. Numerical Integration ({int_method})")
+plt.xlabel("x")
+plt.ylabel("Value")
+plt.legend()
+plt.grid(True, linestyle='--', alpha=0.5)
+plt.tight_layout()
+plt.show()
 `;
 
       case "convergence":
         return `# [代码引擎切片 4] 极限定理与步长收敛性分析 (Limit & Convergence Slicer)
 import numpy as np
+import matplotlib.pyplot as plt
 
-# 验证截断误差极限: E(dx) = O(dx^2)
+# 验证截断误差极限与收敛阶: E(h) = O(h^p)
 steps = [0.2, 0.1, 0.05, 0.025, 0.0125]
-errors = []
+errors_central = []
+errors_forward = []
 
+print("=== 4. 步长收敛阶极限分析报告 ===")
 for h in steps:
     x_nodes = np.arange(0, 5, h)
     y_nodes = np.sin(x_nodes)
-    dy_central = (y_nodes[2:] - y_nodes[:-2]) / (2 * h)
-    dy_exact = np.cos(x_nodes[1:-1])
-    rmse = np.sqrt(np.mean((dy_central - dy_exact)**2))
-    errors.append(rmse)
-    print(f"步长 h = {h:.4f} -> 截断误差 RMSE = {rmse:.6e}")
+    dy_exact = np.cos(x_nodes)
+    
+    # 1. 中心差分 O(h^2)
+    dy_c = (y_nodes[2:] - y_nodes[:-2]) / (2 * h)
+    rmse_c = np.sqrt(np.mean((dy_c - dy_exact[1:-1])**2))
+    errors_central.append(rmse_c)
+    
+    # 2. 前向差分 O(h)
+    dy_f = (y_nodes[1:] - y_nodes[:-1]) / h
+    rmse_f = np.sqrt(np.mean((dy_f - dy_exact[:-1])**2))
+    errors_forward.append(rmse_f)
+    
+    print(f"步长 h = {h:.4f} -> 中心差分 RMSE = {rmse_c:.6e}, 前向差分 RMSE = {rmse_f:.6e}")
 
-print("当步长 h 减半时，中心差分误差收敛下降为原来的 1/4 (O(h^2))")
+print("结论: 当步长 h 减半时，中心差分误差按 O(h^2) 下降为 1/4，前向差分按 O(h) 下降为 1/2")
+
+# 双对数坐标图展示收敛斜率 (Log-Log Convergence Plot)
+plt.figure(figsize=(8.5, 4.5))
+plt.loglog(steps, errors_central, 'bo-', linewidth=2, label='Central Diff: O(h^2) (Slope ≈ 2)')
+plt.loglog(steps, errors_forward, 'rs--', linewidth=1.5, label='Forward Diff: O(h) (Slope ≈ 1)')
+plt.xlabel("Step Size h")
+plt.ylabel("Truncation Error (RMSE)")
+plt.title("4. Numerical Differentiation Error Convergence (Log-Log Scale)")
+plt.legend()
+plt.grid(True, which="both", ls="--", alpha=0.5)
+plt.tight_layout()
+plt.show()
 `;
 
       case "application":
-        return `# [代码引擎切片 5] IMU传感器双重积分 / 2D图像Sobel算子 (Applications Slicer)
+        return `# [代码引擎切片 5] IMU传感器双重积分与物理运动学应用 (Applications Slicer)
 import numpy as np
+import matplotlib.pyplot as plt
 
-# IMU 传感器加速度 -> 速度 -> 位移双重积分
-dt = 0.05
-accel = -9.81 + 3.0 * np.sin(np.linspace(0, 10, 100))
+# 1. 模拟 IMU 加速度计传感器数据 a(t)
+dt = 0.02  # 50 Hz 采样频率
+t = np.arange(0, 10, dt)
+N = len(t)
+accel = 2.5 * np.sin(1.2 * t) + np.random.normal(0, 0.05, N)
+
+# 2. 一重积分: 加速度 -> 速度 v(t) = ∫ a(t)dt
 velocity = np.cumsum(accel) * dt
+
+# 3. 二重积分: 速度 -> 位移 x(t) = ∫ v(t)dt
 position = np.cumsum(velocity) * dt
 
-print(f"[IMU应用切片] 末态速度 v(T) = {velocity[-1]:.3f} m/s, 末态位移 x(T) = {position[-1]:.3f} m")
+print("=== 5. IMU 双重数值积分运动学输出 ===")
+print(f"采样时长: {t[-1]:.2f}s, 步长 dt: {dt:.4f}s, 点数: {N}")
+print(f"末态加速度 a(T) = {accel[-1]:.3f} m/s^2")
+print(f"末态速度   v(T) = {velocity[-1]:.3f} m/s")
+print(f"末态位移   x(T) = {position[-1]:.3f} m")
+
+# 4. 可视化三联图
+fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(9, 7.5), sharex=True)
+ax1.plot(t, accel, 'r-', label='Acceleration a(t) [m/s²]')
+ax1.set_title('IMU Double Integration Kinematics')
+ax1.legend()
+ax1.grid(True, linestyle='--', alpha=0.5)
+
+ax2.plot(t, velocity, 'b-', label='Velocity v(t) = ∫a dt [m/s]')
+ax2.legend()
+ax2.grid(True, linestyle='--', alpha=0.5)
+
+ax3.plot(t, position, 'g-', label='Position x(t) = ∬a dt² [m]')
+ax3.legend()
+ax3.grid(True, linestyle='--', alpha=0.5)
+ax3.set_xlabel('Time t (s)')
+
+plt.tight_layout()
+plt.show()
 `;
 
       case "full":
       default:
-        return `import numpy as np
+        return `# [离散数据微积分实验室] 完整端到端算法处理链
+import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from scipy.integrate import simpson, trapezoid
 from scipy.signal import savgol_filter
 
-# 1. 构建离散数据微积分实验室数据集 (${signalPreset})
-N = ${slicedData.length}
-x = np.linspace(${sliceBounds.startX.toFixed(2)}, ${sliceBounds.endX.toFixed(2)}, N)
-dx = x[1] - x[0]
+# 算法与切片配置
+diff_method = "${diffMethod}"
+int_method = "${intMethod}"
+filter_method = "${filterMethod}"
+signal_preset = "${signalPreset}"
+
+# 1. 构建离散数据微积分实验室数据集
+N = ${totalN}
+x = np.linspace(${startXVal}, ${endXVal}, N)
+dx = ${calculatedDx}
 
 # 模拟信号生成与噪声注入 (σ = ${noiseLevel})
 y_clean = np.sin(x) + 0.5 * np.sin(3 * x)
 np.random.seed(42)
 y_noisy = y_clean + np.random.normal(0, ${noiseLevel}, N)
 
-# 2. 信号平滑滤波切片 (${filterMethod})
+# 2. 信号平滑滤波切片 (filter_method)
 ${
   filterMethod === "savitzky_golay"
     ? "y_filtered = savgol_filter(y_noisy, window_length=5, polyorder=2)"
@@ -206,22 +343,22 @@ ${
     : "y_filtered = y_noisy.copy()"
 }
 
-# 3. 离散数值求导切片 (${diffMethod})
+# 3. 离散数值求导切片 (diff_method)
 ${
   diffMethod === "central"
-    ? "dy_dx = np.zeros_like(y_filtered)\ndy_dx[1:-1] = (y_filtered[2:] - y_filtered[:-2]) / (2 * dx)\ndy_dx[0] = (y_filtered[1] - y_filtered[0]) / dx\ndy_dx[-1] = (y_filtered[-1] - y_filtered[-2]) / dx"
+    ? "# 中心差分法 O(dx^2)\ndy_dx = np.zeros_like(y_filtered)\ndy_dx[1:-1] = (y_filtered[2:] - y_filtered[:-2]) / (2 * dx)\ndy_dx[0] = (y_filtered[1] - y_filtered[0]) / dx\ndy_dx[-1] = (y_filtered[-1] - y_filtered[-2]) / dx"
     : diffMethod === "forward"
-    ? "dy_dx = np.zeros_like(y_filtered)\ndy_dx[:-1] = np.diff(y_filtered) / dx\ndy_dx[-1] = dy_dx[-2]"
-    : "dy_dx = np.zeros_like(y_filtered)\ndy_dx[1:] = np.diff(y_filtered) / dx\ndy_dx[0] = dy_dx[1]"
+    ? "# 前向差分法 O(dx)\ndy_dx = np.zeros_like(y_filtered)\ndy_dx[:-1] = np.diff(y_filtered) / dx\ndy_dx[-1] = dy_dx[-2]"
+    : "# 后向差分法 O(dx)\ndy_dx = np.zeros_like(y_filtered)\ndy_dx[1:] = np.diff(y_filtered) / dx\ndy_dx[0] = dy_dx[1]"
 }
 
-# 4. 复合数值积分切片 (${intMethod})
+# 4. 复合数值积分切片 (int_method)
 ${
   intMethod === "trapezoidal"
-    ? "cum_integral = np.zeros_like(y_filtered)\nfor i in range(1, N):\n    cum_integral[i] = trapezoid(y_filtered[:i+1], x[:i+1])"
+    ? "# 复合梯形积分\ncum_integral = np.zeros_like(y_filtered)\nfor i in range(1, N):\n    cum_integral[i] = trapezoid(y_filtered[:i+1], x[:i+1])"
     : intMethod === "simpson"
-    ? "cum_integral = np.cumsum(y_filtered) * dx"
-    : "cum_integral = np.cumsum(y_filtered) * dx"
+    ? "# 复合辛普森积分\ncum_integral = np.zeros_like(y_filtered)\nfor i in range(1, N):\n    if i % 2 == 0:\n        cum_integral[i] = simpson(y_filtered[:i+1], x=x[:i+1])\n    else:\n        cum_integral[i] = trapezoid(y_filtered[:i+1], x[:i+1])"
+    : "# 矩形累加积分\ncum_integral = np.cumsum(y_filtered) * dx"
 }
 
 # 5. 构建 Pandas DataFrame 结果集
@@ -237,23 +374,26 @@ df = pd.DataFrame({
 # 6. 控制台标准输出分析
 print("=== 离散数据微积分实验室 Python 运行报告 ===")
 print(f"数据总点数 N: {len(df)}, 步长 dx: {dx:.4f}")
-print(f"求导算法 ({diffMethod}): 导数均值 = {df['dy_dx'].mean():.4f}, 方差 = {df['dy_dx'].var():.4f}")
-print(f"数值积分算法 ({intMethod}): 定积分总面积 ∫f(x)dx = {df['cum_integral'].iloc[-1]:.6f}")
+print(f"求导算法 ({diff_method}): 导数均值 = {df['dy_dx'].mean():.4f}, 方差 = {df['dy_dx'].var():.4f}")
+print(f"数值积分算法 ({int_method}): 定积分总面积 ∫f(x)dx = {df['cum_integral'].iloc[-1]:.6f}")
 
 # 7. 绘制 Matplotlib 三图组合可视化
 fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(10, 8), sharex=True)
 ax1.plot(x, y_noisy, 'r.', alpha=0.4, label='Noisy Input')
-ax1.plot(x, y_filtered, 'b-', label='Filtered Signal')
+ax1.plot(x, y_filtered, 'b-', label=f'Filtered Signal ({filter_method})')
 ax1.set_title('1. Signal Denoising')
 ax1.legend()
+ax1.grid(True, linestyle='--', alpha=0.5)
 
-ax2.plot(x, dy_dx, 'g-', label="dy/dx (${diffMethod})")
+ax2.plot(x, dy_dx, 'g-', label=f"dy/dx ({diff_method})")
 ax2.set_title("2. Numerical Derivative f'(x)")
 ax2.legend()
+ax2.grid(True, linestyle='--', alpha=0.5)
 
-ax3.plot(x, cum_integral, 'm-', label="Integral Area (${intMethod})")
+ax3.plot(x, cum_integral, 'm-', label=f"Integral Area ({int_method})")
 ax3.set_title("3. Cumulative Integral ∫f(x)dx")
 ax3.legend()
+ax3.grid(True, linestyle='--', alpha=0.5)
 
 plt.tight_layout()
 plt.show()
@@ -299,19 +439,19 @@ plt.show()
           <div className="flex items-center gap-2">
             <button
               onClick={handleCopyCode}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-xl text-xs font-semibold transition-all border border-slate-200 active:scale-95"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-xl text-xs font-semibold transition-all border border-slate-200 active:scale-95 cursor-pointer"
             >
               {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-              {copied ? "已复制切片代码" : "复制当前切片代码"}
+              {copied ? "已复制代码" : "复制代码"}
             </button>
 
             <button
               onClick={handleRunPythonCode}
               disabled={isRunning}
-              className="flex items-center gap-2 px-4 py-1.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white rounded-xl text-xs font-bold transition-all shadow-md active:scale-95 disabled:opacity-50"
+              className="flex items-center gap-2 px-4 py-1.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white rounded-xl text-xs font-bold transition-all shadow-md active:scale-95 disabled:opacity-50 cursor-pointer"
             >
               <Play className="w-3.5 h-3.5 fill-current" />
-              {isRunning ? "Python 解释器计算中..." : "一键运行 Python 源码"}
+              {isRunning ? "正在运行..." : "运行代码"}
             </button>
           </div>
         </div>
